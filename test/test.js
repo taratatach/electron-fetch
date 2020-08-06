@@ -11,6 +11,8 @@ import FormData from 'form-data'
 import { parse as parseURL } from 'url'
 import { URL } from 'whatwg-url'
 import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
 import assert from 'assert'
 
 import { TestProxy, TestServer } from './server'
@@ -826,6 +828,45 @@ const createTestSuite = (useElectronNet) => {
         expect(res.headers['transfer-encoding']).to.equal('chunked')
         expect(res.headers['content-type']).to.be.undefined
         expect(res.headers['content-length']).to.be.undefined
+      })
+    })
+
+    it('should allow POST request with empty readable stream as body', function () {
+      const filepath = path.join(os.tmpdir(), 'empty-file.txt')
+      const createEmptyFile = new Promise((resolve, reject) => {
+        fs.open(filepath, 'w', (err, fd) => {
+          if (err) reject(err)
+          else fs.close(fd, resolve)
+        })
+      })
+
+      return createEmptyFile.then(() => {
+        return new Promise(resolve => {
+          const stream = fs.createReadStream(filepath)
+          stream.on('open', () => {
+            resolve(stream)
+          })
+        })
+      }).then(body => {
+        url = `${base}inspect`
+        opts = {
+          method: 'POST',
+          body,
+          useElectronNet
+        }
+        return fetch(url, opts)
+      }).then(res => {
+        return res.json()
+      }).then(res => {
+        expect(res.method).to.equal('POST')
+        expect(res.body).to.equal('')
+        expect(res.headers['content-type']).to.be.undefined
+        if (useElectronNet) {
+          expect(res.headers['transfer-encoding']).to.equal('chunked')
+          expect(res.headers['content-length']).to.be.undefined
+        } else {
+          expect(res.headers['content-length']).to.eql('0')
+        }
       })
     })
 
